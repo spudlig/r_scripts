@@ -38,7 +38,6 @@ cat("affinity propogation optimal number of clusters:", length(d.apclus@clusters
 heatmap(d.apclus)
 plot(d.apclus, resw)
 
-
 ########## BIC () 
 d_clust <- Mclust(as.matrix(resw), G=1:20)
 m.best <- dim(d_clust$z)[2]
@@ -54,14 +53,56 @@ pvrect(resw.pv,alpha = 0.90)
 resw.pv.par<-pvpick(resw.pv,alpha = 0.9)
 resw.pv.par
 
-# get coordinates for p-value regions
+# get coordinates for p-value regions - depending on the cluster correlation p-value
+comp
 for (i in seq(1:34)){
   for (j in seq(1:227))
     if(colnames(region2)[i]==comp[j]){
       reg2_cor_y60[i,]<-maa_y60[j,]
     }
 }
-
+# cluster 2
+for (i in seq(1:34)){
+  for (j in seq(1:227))
+    if(colnames(region2)[i]==comp[j]){
+      reg2_cor_y60[i,]<-maa_y60[j,]
+    }
+}
+# cluster 3
+for (i in seq(1:34)){
+  for (j in seq(1:227))
+    if(colnames(region2)[i]==comp[j]){
+      reg2_cor_y60[i,]<-maa_y60[j,]
+    }
+}
+# cluster 4
+for (i in seq(1:34)){
+  for (j in seq(1:227))
+    if(colnames(region2)[i]==comp[j]){
+      reg2_cor_y60[i,]<-maa_y60[j,]
+    }
+}
+# cluster 5
+for (i in seq(1:34)){
+  for (j in seq(1:227))
+    if(colnames(region2)[i]==comp[j]){
+      reg2_cor_y60[i,]<-maa_y60[j,]
+    }
+}
+# cluster 6
+for (i in seq(1:34)){
+  for (j in seq(1:227))
+    if(colnames(region2)[i]==comp[j]){
+      reg2_cor_y60[i,]<-maa_y60[j,]
+    }
+}
+# cluster 7
+for (i in seq(1:34)){
+  for (j in seq(1:227))
+    if(colnames(region2)[i]==comp[j]){
+      reg2_cor_y60[i,]<-maa_y60[j,]
+    }
+}
 ### Gap Statistics
 clusGap(resw, kmeans, 10, B = 100, verbose = interactive())
 

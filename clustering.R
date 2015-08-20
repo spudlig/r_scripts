@@ -5,8 +5,10 @@ library("fpc")
 library("pvclust")
 library("apcluster")
 ################### how many cluster
-
-
+### corrplot used previously 
+?cor
+corrplot(resw)
+?corrplot
 ### elbow criterion (würde für 6 regionen gut passen, auch mit fünf)
 wss <- (nrow(resw)-1)*sum(apply(resw,2,var))
 for (i in 2:15) wss[i] <- sum(kmeans(resw,

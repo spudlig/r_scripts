@@ -1,0 +1,1031 @@
+require("xlsx")
+library("rworldmap")
+library("rgdal")
+library("scales")
+library("corrplot")
+library("ggthemes")
+library("nortest")
+setwd("~/Studium/Watermanagement/Masterarbeit/data/danube_100/")
+# Vom Directory in eine Liste
+a<-read.xlsx("./GRDC_no_danube.xlsx",sheetIndex = "Sheet1",header=F)
+path<-"./"
+file_dir<-dir(path,pattern=".day")
+file_dir2<-dir(path,pattern=".txt")
+readt<-function(path){
+  tab<-read.table(path,sep="",dec=".",header=F)
+  return(tab)
+}
+readTable<-function(file_dir){
+  table<-lapply(file_dir2,readt)
+  return(table)
+}
+
+################### get coordinates for function ; as well as GRDC-No, Catchment area, Station and River
+readn<-function(path){
+  coor<-grep("GRDC-No.:|River:",read.table(path,sep=",",comment.char="")[c(1:10),1],perl = T,value=T)
+  coor<-gsub("\n","",x = coor)
+  return(coor)
+}
+readNames<-function(file_dir){
+  table<-lapply(file_dir,readn)
+  return(table)
+}
+read_coord<-function(path){
+  coor<-grep("Latitude|Longitude",read.table(path,sep=",",comment.char="")[c(1:15),1],perl = T,value=T)
+  coor<-gsub("\xb0","",x = coor)
+  return(coor)
+}
+readCor<-function(file_dir){
+  table<-lapply(file_dir,read_coord)
+  return(table)
+}
+# read them in
+largeCords<-readCor(file_dir)
+largeNames<-readNames(file_dir)
+largeList<-readTable(file_dir2)
+largeList2<-readTable(file_dir)
+
+for(i in seq_along(largeList)){
+  names(largeList)[i]<-gsub(".txt","",file_dir2[i])
+}
+file_dir2<-file_dir2[-27]
+file_dir2[27]
+corr<-matrix(NA,32,2)
+for(i in seq_along(file_dir2)){
+    corr[i,]<-grep("Latitude|Longitude",read.table(paste0("./",gsub(".txt","",file_dir2[i]),".day"),sep=",",comment.char="")[c(1:15),1],perl = T,value=T) 
+    corr[i,1]<-as.numeric(strsplit(corr[i,1],":       ",perl=T)[[1]][2])
+    corr[i,2]<-as.numeric(strsplit(corr[i,2],":       ",perl=T)[[1]][2])
+}
+rownames(corr)<-gsub(".txt","",file_dir2)
+colnames(corr)<-c("Lat","Long")
+nam<-matrix(NA,32,1)
+for(i in seq_along(nam)){
+  nam[i,1]<-rownames(corr)[i]  
+}
+
+danube_list<-list()
+
+get.matrix2<-function(table){
+  data<-as.numeric(table[[3]])
+  date<-as.Date(table[[1]], "%Y-%m-%d")
+  year<-as.character(format(date,format="%Y"))
+  month<-format(date,format="%m")
+  day<-format(date,format="%d")
+  mat<-data.frame(year,month,day,data,date)
+  return(mat)
+}
+
+
+
+for(i in seq_along(dali)){
+  leng[i,1]<-as.numeric((NROW(dali[[i]][[4]]))/365.25)
+  leng[i,2]<-as.character(head(dali[[i]][[1]])[2])
+  leng[i,3]<-as.character(tail(dali[[i]][[1]])[5])
+  leng[i,4]<-largeCords[[i]][[1]]
+  leng[i,5]<-largeCords[[i]][[2]]
+}
+leng
+
+longer<-leng[as.numeric(leng[,1])>60,]
+
+longer<-longer[as.numeric(longer[,3])>=1999,]
+longer<-longer[as.numeric(longer[,2])<1939,]
+
+
+# place River-Names names from largeNames to largeList 
+for (i in seq_along(largeList)){
+  names(largeList)[i]<-as.character(gsub("# GRDC-No.:              ","",largeNames[[i]][1],perl = T))
+}
+names(largeList)
+# place River-Names names from largeNames to largeList 
+for (i in seq_along(largeCords)){
+  largeCords[[i]][1]<-as.numeric(strsplit(largeCords[[i]][1],":       ",perl=T)[[1]][2])
+  largeCords[[i]][2]<-as.numeric(strsplit(largeCords[[i]][2],":       ",perl=T)[[1]][2])
+}
+show_col(economist_pal()(6))
+shape <- readShapeLines("~/Desktop/europe-waterways-shape/waterways.shp")
+
+newmap <- getMap(resolution = "high")
+plot(newmap,xlim = c(8,40),ylim = c(45,50),asp = 1)
+lines(shape,col="#7ad2f6",lwd=0.25)
+for(i in seq_along(corr)){
+  points(corr[i,2],corr[i,1],col="#6794a7",pch=16)
+}
+# rivers longer than 60yrs, between 1939 and 1999
+dev.off()
+plot(newmap,xlim = c(8,40),ylim = c(45,50),asp = 1)
+dali<-largeList
+dali_y100<-dali
+dali_y65<-dali
+### kickout -999
+kickoutnine<-function(df){
+  if(min(df[[4]])=="-999"){
+    df=NULL
+  } 
+  return(df)
+}
+lltry<-lapply(dali_60[1:length(file_dir2)],kickoutnine)
+listko<-lltry[!sapply(lltry, is.null)]
+
+##### AMS get max years. depending on wich list...
+AMS_get<-function(df,...){
+  nSubsets<-NROW(df)/365.25
+  outList<-vector("list",length=nSubsets)
+  maxOL<-vector("numeric",length=nSubsets)
+  totRow<-nrow(df[[4]])
+  
+  for (i in seq_len(nSubsets)){
+    rowsToGrab<-seq(i*365.25-365.25,(365.25*i),1)
+    outList[[i]]<-df[[4]][rowsToGrab]
+    maxOL[i]<-max(outList[[i]],na.rm=T)
+  } 
+  return(maxOL)
+}
+maxOL_danube_y65<-lapply(dali_y65,AMS_get)
+maxOL_danube_y100<-lapply(dali_y100,AMS_get)
+
+
+#################################################################################
+#################################################################################
+#################################################################################
+########## correlation of maxOL_danube (AMS CORRELATION) for 65 years 32 rivers
+
+maxOL_cor<-matrix(NA,65,30)
+for (i in seq(1,30,1)){
+  for (j in seq(1,65,1)){
+    maxOL_cor[j,i]<-maxOL_danube_y65[[i]][j]
+  }
+}
+
+colnames(maxOL_cor)<-rownames(corr)
+rownames(maxOL_cor)<-seq(1931,1995,1)
+maxOL_cor_t<-t(maxOL_cor)
+cor_maxOL_t<-cor(maxOL_cor_t,maxOL_cor_t)
+cor_maxOL<-cor(maxOL_cor,maxOL_cor)
+corrplot(cor_maxOL)
+corrplot(cor_maxOL_t)
+corrplot(cor_maxOL,order="hclust",addrect=5,cl.ratio = 0.1, cl.align = "r",tl.cex=0.7)
+corr<-cbind(corr,nam)
+
+### shift function for 30years window
+shiftit<-function(maxOL,quantile=0.99,logIV_factor=1.25,...){
+shift<-matrix(NA,(NROW(maxOL)/2),6)
+colnames(shift)<-c("Wei","Gum","PE3","LN3","LN4","GEV")
+
+for (i in seq_along(shift[,1])){
+  
+  seqq<-seq(i,29+i,1)
+  y0.wei<-quawei(f=quantile, para=pelwei(samlmu(maxOL[seqq]),bound=0))
+  y0.gum<-quagum(f=quantile, para=pelgum(samlmu(maxOL[seqq])))
+  y0.pe3<-quape3(f=quantile, para=pelpe3(samlmu(maxOL[seqq])))
+  y0.ln3<-qualn3(f=quantile, para=pelln3(samlmu(maxOL[seqq]),bound=0))
+  y0.ln4<-qlnormTrunc(p = quantile, meanlog = pelln3(samlmu(maxOL[seqq]),bound=0)[[2]],
+                      sdlog = pelln3(samlmu(maxOL[seqq]),bound=0)[[3]], min = 0, max = (max(maxOL[seqq])*logIV_factor))
+  y0.gev<-quagev(f=quantile, para=pelgev(samlmu(maxOL[seqq])))
+  shift[i,1]<-y0.wei
+  shift[i,2]<-y0.gum
+  shift[i,3]<-y0.pe3
+  shift[i,4]<-y0.ln3
+  shift[i,5]<-y0.ln4
+  shift[i,6]<-y0.gev
+  
+}
+return(shift)
+}
+### cummulative function from 30years till upper end
+redqueen<-function(maxOL,quantile=0.99,logIV_factor=1.25,...){
+  shift<-matrix(NA,(NROW(maxOL)/2),6)
+  colnames(shift)<-c("Wei","Gum","PE3","LN3","LN4","GEV")
+  
+  for (i in seq_along(shift[,1])){
+    
+    seqq<-seq(1,29+i,1)
+    y0.wei<-quawei(f=quantile, para=pelwei(samlmu(maxOL[seqq]),bound=0))
+    y0.gum<-quagum(f=quantile, para=pelgum(samlmu(maxOL[seqq])))
+    y0.pe3<-quape3(f=quantile, para=pelpe3(samlmu(maxOL[seqq])))
+    y0.ln3<-qualn3(f=quantile, para=pelln3(samlmu(maxOL[seqq]),bound=0))
+    y0.ln4<-qlnormTrunc(p = quantile, meanlog = pelln3(samlmu(maxOL[seqq]),bound=0)[[2]],
+                        sdlog = pelln3(samlmu(maxOL[seqq]),bound=0)[[3]], min = 0, max = (max(maxOL[seqq])*logIV_factor))
+    y0.gev<-quagev(f=quantile, para=pelgev(samlmu(maxOL[seqq])))
+    shift[i,1]<-y0.wei
+    shift[i,2]<-y0.gum
+    shift[i,3]<-y0.pe3
+    shift[i,4]<-y0.ln3
+    shift[i,5]<-y0.ln4
+    shift[i,6]<-y0.gev
+    
+  }
+  return(shift)
+} 
+
+shift_danube<-lapply(maxOL_danube_y65,shiftit)
+shift_danube_scaled<-lapply(shift_danube,scale)
+
+stay_danube<-lapply(maxOL_danube_y65,redqueen)
+stay_danube_scaled<-lapply(stay_danube,scale)
+
+####### corr matrix for (NON-) standardized/scaled data
+
+# SCALED for 65years CUMMULATIVE ### get only matrix, no correlation yet
+wei_scaled_stay<-matrix(NA,32,30)
+gum_scaled_stay<-matrix(NA,32,30)
+pe3_scaled_stay<-matrix(NA,32,30)
+ln3_scaled_stay<-matrix(NA,32,30)
+ln4_scaled_stay<-matrix(NA,32,30)
+gev_scaled_stay<-matrix(NA,32,30)
+colnames(wei_scaled_stay)<-names(dali_y65)
+colnames(gum_scaled_stay)<-names(dali_y65)
+colnames(pe3_scaled_stay)<-names(dali_y65)
+colnames(ln3_scaled_stay)<-names(dali_y65)
+colnames(ln4_scaled_stay)<-names(dali_y65)
+colnames(gev_scaled_stay)<-names(dali_y65)
+
+for (i in seq(1,30,1)){
+  for (j in seq(1,32,1)){
+    wei_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,1]
+    gum_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,2]
+    pe3_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,3]
+    ln3_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,4]
+    ln4_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,5]
+    gev_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,6]
+  }
+}
+
+# SCALED for 65years SHIFT ### get only matrix, no correlation yet 
+wei_scaled<-matrix(NA,32,30)
+gum_scaled<-matrix(NA,32,30)
+pe3_scaled<-matrix(NA,32,30)
+ln3_scaled<-matrix(NA,32,30)
+ln4_scaled<-matrix(NA,32,30)
+gev_scaled<-matrix(NA,32,30)
+colnames(wei_scaled)<-names(dali_y65)
+colnames(gum_scaled)<-names(dali_y65)
+colnames(pe3_scaled)<-names(dali_y65)
+colnames(ln3_scaled)<-names(dali_y65)
+colnames(ln4_scaled)<-names(dali_y65)
+colnames(gev_scaled)<-names(dali_y65)
+for (i in seq(1,30,1)){
+  for (j in seq(1,32,1)){
+    wei_scaled[j,i]<-shift_danube_scaled[[i]][j,1]
+    gum_scaled[j,i]<-shift_danube_scaled[[i]][j,2]
+    pe3_scaled[j,i]<-shift_danube_scaled[[i]][j,3]
+    ln3_scaled[j,i]<-shift_danube_scaled[[i]][j,4]
+    ln4_scaled[j,i]<-shift_danube_scaled[[i]][j,5]
+    gev_scaled[j,i]<-shift_danube_scaled[[i]][j,6]
+  }
+}
+
+# NON-SCALED for 65years SHIFT ### get only matrix, no correlation yet 
+wei_shift<-matrix(NA,32,30)
+gum_shift<-matrix(NA,32,30)
+pe3_shift<-matrix(NA,32,30)
+ln3_shift<-matrix(NA,32,30)
+ln4_shift<-matrix(NA,32,30)
+gev_shift<-matrix(NA,32,30)
+colnames(wei_shift)<-names(dali_y65)
+colnames(gum_shift)<-names(dali_y65)
+colnames(pe3_shift)<-names(dali_y65)
+colnames(ln3_shift)<-names(dali_y65)
+colnames(ln4_shift)<-names(dali_y65)
+colnames(gev_shift)<-names(dali_y65)
+for (i in seq(1,30,1)){
+  for (j in seq(1,32,1)){
+    wei_shift[j,i]<-shift_danube[[i]][j,1]
+    gum_shift[j,i]<-shift_danube[[i]][j,2]
+    pe3_shift[j,i]<-shift_danube[[i]][j,3]
+    ln3_shift[j,i]<-shift_danube[[i]][j,4]
+    ln4_shift[j,i]<-shift_danube[[i]][j,5]
+    gev_shift[j,i]<-shift_danube[[i]][j,6]
+  }
+}
+
+# NON-SCALED for 65years CUMMULATIVE ### get only matrix, no correlation yet 
+wei_stay<-matrix(NA,32,30)
+gum_stay<-matrix(NA,32,30)
+pe3_stay<-matrix(NA,32,30)
+ln3_stay<-matrix(NA,32,30)
+ln4_stay<-matrix(NA,32,30)
+gev_stay<-matrix(NA,32,30)
+colnames(wei_stay)<-names(dali_y65)
+colnames(gum_stay)<-names(dali_y65)
+colnames(pe3_stay)<-names(dali_y65)
+colnames(ln3_stay)<-names(dali_y65)
+colnames(ln4_stay)<-names(dali_y65)
+colnames(gev_stay)<-names(dali_y65)
+for (i in seq(1,30,1)){
+  for (j in seq(1,32,1)){
+    wei_stay[j,i]<-stay_danube[[i]][j,1]
+    gum_stay[j,i]<-stay_danube[[i]][j,2]
+    pe3_stay[j,i]<-stay_danube[[i]][j,3]
+    ln3_stay[j,i]<-stay_danube[[i]][j,4]
+    ln4_stay[j,i]<-stay_danube[[i]][j,5]
+    gev_stay[j,i]<-stay_danube[[i]][j,6]
+  }
+}
+
+#### CORRELATIONs
+## SCALED SHIFT
+wei_scaled_shift_cor<-cor(wei_scaled,wei_scaled)
+gum_scaled_shift_cor<-cor(gum_scaled,gum_scaled)
+pe3_scaled_shift_cor<-cor(pe3_scaled,pe3_scaled)
+ln3_scaled_shift_cor<-cor(ln3_scaled,ln3_scaled)
+ln4_scaled_shift_cor<-cor(ln4_scaled,ln4_scaled)
+gev_scaled_shift_cor<-cor(gev_scaled,gev_scaled)
+
+## NON-SCALED SHIFT
+wei_shift_cor<-cor(wei_shift,wei_shift)
+gum_shift_cor<-cor(gum_shift,gum_shift)
+pe3_shift_cor<-cor(pe3_shift,pe3_shift)
+ln3_shift_cor<-cor(ln3_shift,ln3_shift)
+ln4_shift_cor<-cor(ln4_shift,ln4_shift)
+gev_shift_cor<-cor(gev_shift,gev_shift)
+
+## SCALED CUMMULATIVE
+wei_scaled_stay_cor<-cor(wei_scaled_stay,wei_scaled_stay)
+gum_scaled_stay_cor<-cor(gum_scaled_stay,gum_scaled_stay)
+pe3_scaled_stay_cor<-cor(pe3_scaled_stay,pe3_scaled_stay)
+ln3_scaled_stay_cor<-cor(ln3_scaled_stay,ln3_scaled_stay)
+ln4_scaled_stay_cor<-cor(ln4_scaled_stay,ln4_scaled_stay)
+gev_scaled_stay_cor<-cor(gev_scaled_stay,gev_scaled_stay)
+
+## NON-SCALED CUMMULATIVE
+wei_stay_cor<-cor(wei_stay,wei_stay)
+gum_stay_cor<-cor(gum_stay,gum_stay)
+pe3_stay_cor<-cor(pe3_stay,pe3_stay)
+ln3_stay_cor<-cor(ln3_stay,ln3_stay)
+ln4_stay_cor<-cor(ln4_stay,ln4_stay)
+gev_stay_cor<-cor(gev_stay,gev_stay)
+
+##### CORRPLOTS
+dev.off()
+par(mfrow=c(1,2))
+#weibull
+corrplot(wei_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(wei_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(wei_shift_cor,order = "hclust",addrect = 4)
+corrplot(wei_stay_cor,order = "hclust",addrect = 4)
+#gumbel
+corrplot(gum_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(gum_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(gum_shift_cor,order = "hclust",addrect = 4)
+corrplot(gum_stay_cor,order = "hclust",addrect = 4)
+#pe3
+corrplot(pe3_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(pe3_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(pe3_shift_cor,order = "hclust",addrect = 4)
+corrplot(pe3_stay_cor,order = "hclust",addrect = 4)
+#ln3
+corrplot(ln3_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln3_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln3_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln3_stay_cor,order = "hclust",addrect = 4)
+#ln4
+corrplot(ln4_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln4_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln4_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln4_stay_cor,order = "hclust",addrect = 4)
+#gev
+corrplot(gev_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(gev_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(gev_shift_cor,order = "hclust",addrect = 4)
+corrplot(gev_stay_cor,order = "hclust",addrect = 4)
+
+##### compare corrplots of all 6 funktions
+par(mfrow=c(2,3))
+# cummulative scaled
+corrplot(wei_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(gum_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(pe3_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln3_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln4_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(gev_scaled_stay_cor,order = "hclust",addrect = 4)
+# shift scaled
+corrplot(wei_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(gum_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(pe3_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln3_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln4_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(gev_scaled_shift_cor,order = "hclust",addrect = 4)
+# shift NON-scaled
+corrplot(wei_shift_cor,order = "hclust",addrect = 4)
+corrplot(gum_shift_cor,order = "hclust",addrect = 4)
+corrplot(pe3_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln3_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln4_shift_cor,order = "hclust",addrect = 4)
+corrplot(gev_shift_cor,order = "hclust",addrect = 4)
+# cummulative NON-scaled
+corrplot(wei_stay_cor,order = "hclust",addrect = 4)
+corrplot(gum_stay_cor,order = "hclust",addrect = 4)
+corrplot(pe3_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln3_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln4_stay_cor,order = "hclust",addrect = 4)
+corrplot(gev_stay_cor,order = "hclust",addrect = 4)
+
+# cummulative scaled
+corrplot(wei_scaled_stay_cor)
+corrplot(gum_scaled_stay_cor)
+corrplot(pe3_scaled_stay_cor)
+corrplot(ln3_scaled_stay_cor)
+corrplot(ln4_scaled_stay_cor)
+corrplot(gev_scaled_stay_cor)
+# cummulative non-scaled
+corrplot(wei_stay_cor)
+corrplot(gum_stay_cor)
+corrplot(pe3_stay_cor)
+corrplot(ln3_stay_cor)
+corrplot(ln4_stay_cor)
+corrplot(gev_stay_cor)
+# shift scaled
+corrplot(wei_scaled_shift_cor)
+corrplot(gum_scaled_shift_cor)
+corrplot(pe3_scaled_shift_cor)
+corrplot(ln3_scaled_shift_cor)
+corrplot(ln4_scaled_shift_cor)
+corrplot(gev_scaled_shift_cor)
+
+
+
+
+cor_wei<-cor(wei_cor,wei_cor)
+cor_wei<-cor(wei_cor,wei_cor)
+cor_wei<-cor(wei_cor,wei_cor)
+cor_wei<-cor(wei_cor,wei_cor)
+
+
+corrplot(cor_wei,order = "hclust",addrect = 4)
+dev.off()
+par(mfrow=c(6,6))
+plot(wei_scaled_cor[,1],type="l")
+for(i in seq_len(30)){
+  plot(wei_scaled_cor[,i],type="l",xlab="",ylab="")
+  lines(gum_scaled_cor[,i],col="#7c260b")
+  lines(pe3_scaled_cor[,i],col="#00887d")
+  lines(ln3_scaled_cor[,i],col="#7ad2f6")
+  lines(gev_scaled_cor[,i],col="orange")
+}
+
+for(i in seq_len(30)){
+  plot(wei_scaled_stay_cor[,i],type="l",xlab="",ylab="")
+  lines(gum_scaled_stay_cor[,i],col="#7c260b")
+  lines(pe3_scaled_stay_cor[,i],col="#00887d")
+  lines(ln3_scaled_stay_cor[,i],col="#7ad2f6")
+  lines(gev_scaled_stay_cor[,i],col="orange")
+}
+for(i in seq_len(30)){
+  plot(wei_scaled_shift_cor[,i],type="l",xlab="",ylab="")
+  lines(gum_scaled_shift_cor[,i],col="#7c260b")
+  lines(pe3_scaled_shift_cor[,i],col="#00887d")
+  lines(ln3_scaled_shift_cor[,i],col="#7ad2f6")
+  lines(gev_scaled_shift_cor[,i],col="orange")
+}
+
+wei_scaled_shift_cor
+
+# weibull only
+for(i in seq_len(30)){
+  plot(wei_cor_stay[,i],type="l",xlab="",ylab="")
+  lines(wei_cor[,i],col="#7c260b")
+}
+
+
+#################################################################################
+#################################################################################
+#################################################################################
+########## correlation of maxOL_danube (AMS CORRELATION) for 100 years 6 rivers
+#maxOL_danube_y100[[5]]<-NULL #because there are only 85years
+
+maxOL_cor<-matrix(NA,100,5)
+for (i in seq(1,5,1)){
+  for (j in seq(1,100,1)){
+    maxOL_cor[j,i]<-maxOL_danube_y100[[i]][j]
+  }
+}
+
+colnames(maxOL_cor)<-rownames(corr)
+rownames(maxOL_cor)<-seq(1905,2005,1)
+maxOL_cor_t<-t(maxOL_cor)
+cor_maxOL_t<-cor(maxOL_cor_t,maxOL_cor_t)
+cor_maxOL<-cor(maxOL_cor,maxOL_cor)
+corrplot(cor_maxOL)
+corrplot(cor_maxOL_t)
+corrplot(cor_maxOL,order="hclust",addrect=5,cl.ratio = 0.1, cl.align = "r",tl.cex=0.7)
+corr<-cbind(corr,nam)
+
+### shift function for 50years window
+shiftit<-function(maxOL,quantile=0.99,logIV_factor=1.25,...){
+  shift<-matrix(NA,(NROW(maxOL)/2),6)
+  colnames(shift)<-c("Wei","Gum","PE3","LN3","LN4","GEV")
+  
+  for (i in seq_along(shift[,1])){
+    
+    seqq<-seq(i,49+i,1)
+    y0.wei<-quawei(f=quantile, para=pelwei(samlmu(maxOL[seqq]),bound=0))
+    y0.gum<-quagum(f=quantile, para=pelgum(samlmu(maxOL[seqq])))
+    y0.pe3<-quape3(f=quantile, para=pelpe3(samlmu(maxOL[seqq])))
+    y0.ln3<-qualn3(f=quantile, para=pelln3(samlmu(maxOL[seqq]),bound=0))
+    y0.ln4<-qlnormTrunc(p = quantile, meanlog = pelln3(samlmu(maxOL[seqq]),bound=0)[[2]],
+                        sdlog = pelln3(samlmu(maxOL[seqq]),bound=0)[[3]], min = 0, max = (max(maxOL[seqq])*logIV_factor))
+    y0.gev<-quagev(f=quantile, para=pelgev(samlmu(maxOL[seqq])))
+    shift[i,1]<-y0.wei
+    shift[i,2]<-y0.gum
+    shift[i,3]<-y0.pe3
+    shift[i,4]<-y0.ln3
+    shift[i,5]<-y0.ln4
+    shift[i,6]<-y0.gev
+    
+  }
+  return(shift)
+}
+### cummulative function from 50years till upper end
+redqueen<-function(maxOL,quantile=0.99,logIV_factor=1.25,...){
+  shift<-matrix(NA,(NROW(maxOL)/2),6)
+  colnames(shift)<-c("Wei","Gum","PE3","LN3","LN4","GEV")
+  
+  for (i in seq_along(shift[,1])){
+    
+    seqq<-seq(1,49+i,1)
+    y0.wei<-quawei(f=quantile, para=pelwei(samlmu(maxOL[seqq]),bound=0))
+    y0.gum<-quagum(f=quantile, para=pelgum(samlmu(maxOL[seqq])))
+    y0.pe3<-quape3(f=quantile, para=pelpe3(samlmu(maxOL[seqq])))
+    y0.ln3<-qualn3(f=quantile, para=pelln3(samlmu(maxOL[seqq]),bound=0))
+    y0.ln4<-qlnormTrunc(p = quantile, meanlog = pelln3(samlmu(maxOL[seqq]),bound=0)[[2]],
+                        sdlog = pelln3(samlmu(maxOL[seqq]),bound=0)[[3]], min = 0, max = (max(maxOL[seqq])*logIV_factor))
+    y0.gev<-quagev(f=quantile, para=pelgev(samlmu(maxOL[seqq])))
+    shift[i,1]<-y0.wei
+    shift[i,2]<-y0.gum
+    shift[i,3]<-y0.pe3
+    shift[i,4]<-y0.ln3
+    shift[i,5]<-y0.ln4
+    shift[i,6]<-y0.gev
+    
+  }
+  return(shift)
+} 
+
+shift_danube<-lapply(maxOL_danube_y100,shiftit)
+shift_danube_scaled<-lapply(shift_danube,scale)
+
+stay_danube<-lapply(maxOL_danube_y100,redqueen)
+stay_danube_scaled<-lapply(stay_danube,scale)
+
+####### corr matrix for (NON-) standardized/scaled data
+seqq<-c(1:5)
+seqqq<-c(1:50)
+# SCALED for 100years CUMMULATIVE ### get only matrix, no correlation yet
+wei_scaled_stay<-matrix(NA,50,5)
+gum_scaled_stay<-matrix(NA,50,5)
+pe3_scaled_stay<-matrix(NA,50,5)
+ln3_scaled_stay<-matrix(NA,50,5)
+ln4_scaled_stay<-matrix(NA,50,5)
+gev_scaled_stay<-matrix(NA,50,5)
+colnames(wei_scaled_stay)<-names(dali_y100)
+colnames(gum_scaled_stay)<-names(dali_y100)
+colnames(pe3_scaled_stay)<-names(dali_y100)
+colnames(ln3_scaled_stay)<-names(dali_y100)
+colnames(ln4_scaled_stay)<-names(dali_y100)
+colnames(gev_scaled_stay)<-names(dali_y100)
+
+for (i in seq_along(seqq)){
+  for (j in seq_along(seqqq)){
+    wei_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,1]
+    gum_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,2]
+    pe3_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,3]
+    ln3_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,4]
+    ln4_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,5]
+    gev_scaled_stay[j,i]<-stay_danube_scaled[[i]][j,6]
+  }
+}
+
+# SCALED for 100years SHIFT ### get only matrix, no correlation yet 
+wei_scaled<-matrix(NA,50,5)
+gum_scaled<-matrix(NA,50,5)
+pe3_scaled<-matrix(NA,50,5)
+ln3_scaled<-matrix(NA,50,5)
+ln4_scaled<-matrix(NA,50,5)
+gev_scaled<-matrix(NA,50,5)
+colnames(wei_scaled)<-names(dali_y100)
+colnames(gum_scaled)<-names(dali_y100)
+colnames(pe3_scaled)<-names(dali_y100)
+colnames(ln3_scaled)<-names(dali_y100)
+colnames(ln4_scaled)<-names(dali_y100)
+colnames(gev_scaled)<-names(dali_y100)
+for (i in seq_along(seqq)){
+  for (j in seq_along(seqqq)){
+    wei_scaled[j,i]<-shift_danube_scaled[[i]][j,1]
+    gum_scaled[j,i]<-shift_danube_scaled[[i]][j,2]
+    pe3_scaled[j,i]<-shift_danube_scaled[[i]][j,3]
+    ln3_scaled[j,i]<-shift_danube_scaled[[i]][j,4]
+    ln4_scaled[j,i]<-shift_danube_scaled[[i]][j,5]
+    gev_scaled[j,i]<-shift_danube_scaled[[i]][j,6]
+  }
+}
+
+# NON-SCALED for 100years SHIFT ### get only matrix, no correlation yet 
+wei_shift<-matrix(NA,50,5)
+gum_shift<-matrix(NA,50,5)
+pe3_shift<-matrix(NA,50,5)
+ln3_shift<-matrix(NA,50,5)
+ln4_shift<-matrix(NA,50,5)
+gev_shift<-matrix(NA,50,5)
+colnames(wei_shift)<-names(dali_y100)
+colnames(gum_shift)<-names(dali_y100)
+colnames(pe3_shift)<-names(dali_y100)
+colnames(ln3_shift)<-names(dali_y100)
+colnames(ln4_shift)<-names(dali_y100)
+colnames(gev_shift)<-names(dali_y100)
+for (i in seq_along(seqq)){
+  for (j in seq_along(seqqq)){
+    wei_shift[j,i]<-shift_danube[[i]][j,1]
+    gum_shift[j,i]<-shift_danube[[i]][j,2]
+    pe3_shift[j,i]<-shift_danube[[i]][j,3]
+    ln3_shift[j,i]<-shift_danube[[i]][j,4]
+    ln4_shift[j,i]<-shift_danube[[i]][j,5]
+    gev_shift[j,i]<-shift_danube[[i]][j,6]
+  }
+}
+
+# NON-SCALED for 65years CUMMULATIVE ### get only matrix, no correlation yet 
+wei_stay<-matrix(NA,50,5)
+gum_stay<-matrix(NA,50,5)
+pe3_stay<-matrix(NA,50,5)
+ln3_stay<-matrix(NA,50,5)
+ln4_stay<-matrix(NA,50,5)
+gev_stay<-matrix(NA,50,5)
+colnames(wei_stay)<-names(dali_y100)
+colnames(gum_stay)<-names(dali_y100)
+colnames(pe3_stay)<-names(dali_y100)
+colnames(ln3_stay)<-names(dali_y100)
+colnames(ln4_stay)<-names(dali_y100)
+colnames(gev_stay)<-names(dali_y100)
+
+for (i in seq_along(seqq)){
+  for (j in seq_along(seqqq)){
+    wei_stay[j,i]<-stay_danube[[i]][j,1]
+    gum_stay[j,i]<-stay_danube[[i]][j,2]
+    pe3_stay[j,i]<-stay_danube[[i]][j,3]
+    ln3_stay[j,i]<-stay_danube[[i]][j,4]
+    ln4_stay[j,i]<-stay_danube[[i]][j,5]
+    gev_stay[j,i]<-stay_danube[[i]][j,6]
+  }
+}
+
+#### CORRELATIONs
+## SCALED SHIFT
+wei_scaled_shift_cor<-cor(wei_scaled,wei_scaled)
+gum_scaled_shift_cor<-cor(gum_scaled,gum_scaled)
+pe3_scaled_shift_cor<-cor(pe3_scaled,pe3_scaled)
+ln3_scaled_shift_cor<-cor(ln3_scaled,ln3_scaled)
+ln4_scaled_shift_cor<-cor(ln4_scaled,ln4_scaled)
+gev_scaled_shift_cor<-cor(gev_scaled,gev_scaled)
+
+## NON-SCALED SHIFT
+wei_shift_cor<-cor(wei_shift,wei_shift)
+gum_shift_cor<-cor(gum_shift,gum_shift)
+pe3_shift_cor<-cor(pe3_shift,pe3_shift)
+ln3_shift_cor<-cor(ln3_shift,ln3_shift)
+ln4_shift_cor<-cor(ln4_shift,ln4_shift)
+gev_shift_cor<-cor(gev_shift,gev_shift)
+
+## SCALED CUMMULATIVE
+wei_scaled_stay_cor<-cor(wei_scaled_stay,wei_scaled_stay)
+gum_scaled_stay_cor<-cor(gum_scaled_stay,gum_scaled_stay)
+pe3_scaled_stay_cor<-cor(pe3_scaled_stay,pe3_scaled_stay)
+ln3_scaled_stay_cor<-cor(ln3_scaled_stay,ln3_scaled_stay)
+ln4_scaled_stay_cor<-cor(ln4_scaled_stay,ln4_scaled_stay)
+gev_scaled_stay_cor<-cor(gev_scaled_stay,gev_scaled_stay)
+
+## NON-SCALED CUMMULATIVE
+wei_stay_cor<-cor(wei_stay,wei_stay)
+gum_stay_cor<-cor(gum_stay,gum_stay)
+pe3_stay_cor<-cor(pe3_stay,pe3_stay)
+ln3_stay_cor<-cor(ln3_stay,ln3_stay)
+ln4_stay_cor<-cor(ln4_stay,ln4_stay)
+gev_stay_cor<-cor(gev_stay,gev_stay)
+
+##### CORRPLOTS
+dev.off()
+par(mfrow=c(2,2))
+#weibull
+corrplot(wei_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(wei_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(wei_shift_cor,order = "hclust",addrect = 4)
+corrplot(wei_stay_cor,order = "hclust",addrect = 4)
+#gumbel
+corrplot(gum_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(gum_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(gum_shift_cor,order = "hclust",addrect = 4)
+corrplot(gum_stay_cor,order = "hclust",addrect = 4)
+#pe3
+corrplot(pe3_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(pe3_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(pe3_shift_cor,order = "hclust",addrect = 4)
+corrplot(pe3_stay_cor,order = "hclust",addrect = 4)
+#ln3
+corrplot(ln3_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln3_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln3_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln3_stay_cor,order = "hclust",addrect = 4)
+#ln4
+corrplot(ln4_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln4_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln4_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln4_stay_cor,order = "hclust",addrect = 4)
+#gev
+corrplot(gev_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(gev_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(gev_shift_cor,order = "hclust",addrect = 4)
+corrplot(gev_stay_cor,order = "hclust",addrect = 4)
+
+##### compare corrplots of all 6 funktions
+dev.off()
+par(mfrow=c(2,3))
+# cummulative scaled
+corrplot(wei_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(gum_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(pe3_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln3_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln4_scaled_stay_cor,order = "hclust",addrect = 4)
+corrplot(gev_scaled_stay_cor,order = "hclust",addrect = 4)
+# shift scaled
+corrplot(wei_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(gum_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(pe3_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln3_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln4_scaled_shift_cor,order = "hclust",addrect = 4)
+corrplot(gev_scaled_shift_cor,order = "hclust",addrect = 4)
+# shift NON-scaled
+corrplot(wei_shift_cor,order = "hclust",addrect = 4)
+corrplot(gum_shift_cor,order = "hclust",addrect = 4)
+corrplot(pe3_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln3_shift_cor,order = "hclust",addrect = 4)
+corrplot(ln4_shift_cor,order = "hclust",addrect = 4)
+corrplot(gev_shift_cor,order = "hclust",addrect = 4)
+# cummulative NON-scaled
+corrplot(wei_stay_cor,order = "hclust",addrect = 4)
+corrplot(gum_stay_cor,order = "hclust",addrect = 4)
+corrplot(pe3_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln3_stay_cor,order = "hclust",addrect = 4)
+corrplot(ln4_stay_cor,order = "hclust",addrect = 4)
+corrplot(gev_stay_cor,order = "hclust",addrect = 4)
+
+# cummulative scaled
+corrplot(wei_scaled_stay_cor)
+corrplot(gum_scaled_stay_cor)
+corrplot(pe3_scaled_stay_cor)
+corrplot(ln3_scaled_stay_cor)
+corrplot(ln4_scaled_stay_cor)
+corrplot(gev_scaled_stay_cor)
+# cummulative non-scaled
+corrplot(wei_stay_cor)
+corrplot(gum_stay_cor)
+corrplot(pe3_stay_cor)
+corrplot(ln3_stay_cor)
+corrplot(ln4_stay_cor)
+corrplot(gev_stay_cor)
+# shift scaled
+corrplot(wei_scaled_shift_cor)
+corrplot(gum_scaled_shift_cor)
+corrplot(pe3_scaled_shift_cor)
+corrplot(ln3_scaled_shift_cor)
+corrplot(ln4_scaled_shift_cor)
+corrplot(gev_scaled_shift_cor)
+
+
+
+
+cor_wei<-cor(wei_cor,wei_cor)
+cor_wei<-cor(wei_cor,wei_cor)
+cor_wei<-cor(wei_cor,wei_cor)
+cor_wei<-cor(wei_cor,wei_cor)
+
+
+corrplot(cor_wei,order = "hclust",addrect = 4)
+dev.off()
+par(mfrow=c(2,3))
+plot(wei_scaled_cor[,1],type="l")
+for(i in seq_len(50)){
+  plot(wei_stay[,i],type="l",xlab="",ylab="",ylim=c(min(wei_stay[,i])*0.95,max(wei_stay[,i])*1.05))
+  lines(gum_stay[,i],col="#7c260b")
+  lines(pe3_stay[,i],col="#00887d")
+  lines(ln3_stay[,i],col="#7ad2f6")
+  lines(gev_stay[,i],col="orange")
+}
+
+for(i in seq_len(30)){
+  plot(wei_scaled_stay_cor[,i],type="l",xlab="",ylab="")
+  lines(gum_scaled_stay_cor[,i],col="#7c260b")
+  lines(pe3_scaled_stay_cor[,i],col="#00887d")
+  lines(ln3_scaled_stay_cor[,i],col="#7ad2f6")
+  lines(gev_scaled_stay_cor[,i],col="orange")
+}
+for(i in seq_len(30)){
+  plot(wei_scaled_shift_cor[,i],type="l",xlab="",ylab="")
+  lines(gum_scaled_shift_cor[,i],col="#7c260b")
+  lines(pe3_scaled_shift_cor[,i],col="#00887d")
+  lines(ln3_scaled_shift_cor[,i],col="#7ad2f6")
+  lines(gev_scaled_shift_cor[,i],col="orange")
+}
+
+
+# weibull only
+for(i in seq_len(30)){
+  plot(wei_cor_stay[,i],type="l",xlab="",ylab="")
+  lines(wei_cor[,i],col="#7c260b")
+}
+
+maxOL_cor_100<-cor(maxOL_cor,maxOL_cor)
+corrplot(maxOL_cor_100)
+
+par(mfrow=c(5,1))
+for(i in seq(1,5,1)){
+  plot(maxOL_cor[,i],type="l")
+  abline(h=seq(1,100,10),v=seq(1,100,10))
+}
+
+par(mfrow=c(30,1))
+for(i in seq(1,30,1)){
+  plot(maxOL_cor[,i],type="l")
+  abline(v=seq(1,65,5))
+}
+maxOL_danube_y65
+maxOL_cor_65<-cor(maxOL_cor,maxOL_cor)
+colnames(maxOL_cor_65)<-names(maxOL_danube_y65)
+rownames(maxOL_cor_65)<-names(maxOL_danube_y65)
+corrplot(maxOL_cor_65,order="hclust")
+
+
+################################################### REGIONS
+
+### GEV
+
+gev_reg1_names<-c("6142650","6343100","6342500","6342910","6444100","6742500","6742800","6142120","6742900","6142680","63422925","6342928","6342600","6342920")
+gev_reg2_names<-c("6142620","6943100","6342980","6142200","6442600","6242100","6342800")
+gev_reg3_names<-c("6142150","6142660","6342970","6343530")
+gev_reg4_names<-c("6342900","6442500","6142601","6142100","6343900")
+
+gev_reg1<-matrix(NA,32,14)
+gev_reg2<-matrix(NA,32,7)
+gev_reg3<-matrix(NA,32,4)
+gev_reg4<-matrix(NA,32,5)
+
+for(i in seq(1,30,1)){
+  for(j in seq(1,32,1)){
+    if(gev_reg1_names[i]==colnames(gev_stay)[j]){
+    gev_reg1[,i]<-gev_stay[j]
+    colnames(gev_reg[i])<-gev_reg1_names[i]
+    }}}
+    
+    
+for(i in seq(1,30,1)){
+  for(j in seq(1,32,1)){
+if(gev_reg2_names[i]==colnames(gev_stay)[j]){
+        gev_reg2[,i]<-gev_stay[j]
+        colnames(gev_reg3[i])<-gev_reg2_names[i]
+}
+        
+if(gev_reg3_names[i]==colnames(gev_stay)[j]){
+          gev_reg3[,i]<-gev_stay[j]
+          colnames(gev_reg3[i])<-gev_reg3_names[i]
+}
+
+if(gev_reg4_names[i]==colnames(gev_stay)[j]){
+            gev_reg4[,i]<-gev_stay[j]
+            colnames(gev_reg4[i])<-gev_reg4_names[i]
+}
+
+### WEI
+
+wei_reg1_names<-c("6943100","6142100","6742500","6342500","6342910","6142120","6342800","6142150","6142601","6342600","6342920")
+wei_reg2_names<-c("6742800","6742900","6342925","6342928","6444100")
+wei_reg3_names<-c("6342900","6343900","6343100","6242100","6442500","6343530","6142200","6142680")
+wei_reg4_names<-c("6142660","6342970","6342980","6442600","6142620","6142650")
+
+
+
+###############################################################
+###############################################################
+###############################################################
+###############################################################
+
+n<-length(maxOL_danube_y65[[1]])
+prob<-(1:n)/(n+1)
+plot_gof<-function(dfff,bound_wei=bound_wei,bound_ln3=bound_ln3,lower_bound_ln4=lower_bound_ln4,logIV_factor=logIV_factor,prob=prob,...){
+  par(mfrow=c(2,3))
+  aa<-summary(lm(quawei(prob, pelwei(samlmu(dfff),bound=bound_wei))~dfff))[c(4,8,10)]
+  a<-plot(sort(quawei(prob, pelwei(samlmu(dfff),bound=bound_wei))), sort(dfff) , xlab = 'Theoretical Quantiles from maxOL', ylab = 'Sample Quantiles from maxOL', main = 'Weibull Quantile-Quantile Plot')
+  abline(0,1)
+  legend(10,5000,paste(names(aa[2]),": ",round(aa[[2]],6),sep=""))
+  names(aa)<-"Weibull"
+  bb<-summary(lm(quagum(prob, pelgum(samlmu(dfff)))~dfff))[c(4,8,10)]
+  b<-plot(sort(quagum(prob, pelgum(samlmu(dfff)))), sort(dfff) , xlab = 'Theoretical Quantiles from maxOL', ylab = 'Sample Quantiles from maxOL', main = 'Gumbel III Quantile-Quantile Plot')
+  abline(0,1)
+  legend(10,5000,paste(names(bb[2]),": ",round(bb[[2]],6),sep=""))
+  names(bb)<-"Gumbel"
+  cc<-summary(lm(quape3(prob, pelpe3(samlmu(dfff)))~dfff))[c(4,8,10)]
+  c<-plot(sort(quape3(prob, pelpe3(samlmu(dfff)))), sort(dfff) , xlab = 'Theoretical Quantiles from maxOL', ylab = 'Sample Quantiles from maxOL', main = 'Pearson III Quantile-Quantile Plot')
+  abline(0,1)
+  legend(10,5000,paste(names(cc[2]),": ",round(cc[[2]],6),sep=""))
+  names(cc)<-"Pearson III"
+  dd<-summary(lm(qualn3(prob, pelln3(samlmu(dfff),bound=bound_ln3))~dfff))[c(4,8,10)]
+  d<-plot(sort(qualn3(prob, pelln3(samlmu(dfff),bound=bound_ln3))), sort(dfff), xlab = 'Theoretical Quantiles from maxOL', ylab = 'Sample Quantiles from maxOL', main = 'Log-Normal III Quantile-Quantile Plot')
+  abline(0,1)
+  legend(10,5000,paste(names(dd[2]),": ",round(dd[[2]],6),sep=""))
+  names(dd)<-"Log-Normal III"
+  ee<-summary(lm(quagev(prob, pelgev(samlmu(dfff)))~dfff))[c(4,8,10)]
+  e<-plot(sort(quagev(prob, pelgev(samlmu(dfff)))), sort(dfff) , xlab = 'Theoretical Quantiles from maxOL', ylab = 'Sample Quantiles from maxOL', main = 'GEV III Quantile-Quantile Plot')
+  abline(0,1)
+  legend(10,5000,paste(names(ee[2]),": ",round(ee[[2]],6),sep=""))
+  names(ee)<-"GEV-Distribution"
+  ff<-summary(lm(qlnormTrunc(prob, meanlog = pelln3(samlmu(dfff),bound=0)[[2]], sdlog = pelln3(samlmu(dfff),bound=0)[[3]], min = lower_bound_ln4, max = (max(dfff)*logIV_factor))~dfff))[c(4,8,10)]
+  f<-plot(sort(qlnormTrunc(prob, meanlog = pelln3(samlmu(dfff),bound=0)[[2]], sdlog = pelln3(samlmu(dfff),bound=0)[[3]], min = lower_bound_ln4, max = (max(dfff)*logIV_factor))), sort(dfff) , xlab = 'Theoretical Quantiles from maxOL', ylab = 'Sample Quantiles from maxOL', main = 'Log-Normal IV Quantile-Quantile Plot')
+  abline(0,1)
+  legend(10,5000,paste(names(ff[2]),": ",round(ff[[2]],6),sep=""))
+  names(ff)<-"Log-Normal IV"
+  
+  return(list(c(a,b,c,d,e,f),c(aa,bb,cc,dd,ee,ff)))
+}
+plot_gof(dfff=maxOL_danube_y65[[1]],bound_wei = 0,bound_ln3 = 0000,lower_bound_ln4=000,logIV_factor=1.005,prob=prob)
+
+
+summary(lm(quawei(prob, pelwei(samlmu(sort(maxOL_danube_y65[[1]])),bound=0))~sort(maxOL_danube_y65[[1]])))
+gu<-sqrt(median(summary(lm(quagum(prob, pelgum(samlmu(sort(maxOL_danube_y65[[1]]))))~sort(maxOL_danube_y65[[1]])))$residuals)^2)
+pe<-summary(lm(quape3(prob, pelpe3(samlmu(sort(maxOL_danube_y65[[1]]))))~sort(maxOL_danube_y65[[1]])))
+le<-summary(lm(qualn3(prob, pelln3(samlmu(sort(maxOL_danube_y65[[1]])),bound=0))~sort(maxOL_danube_y65[[1]])))
+ge<-summary(lm(quagev(prob, pelgev(samlmu(sort(maxOL_danube_y65[[1]]))))~sort(maxOL_danube_y65[[1]])))
+plot(lm(quawei(prob, pelwei(samlmu(sort(maxOL_danube_y65[[1]])),bound=0))~sort(maxOL_danube_y65[[1]])))
+plot(lm(quagum(prob, pelgum(samlmu(sort(maxOL_danube_y65[[1]]))))~sort(maxOL_danube_y65[[1]])))
+plot(lm(quape3(prob, pelpe3(samlmu(sort(maxOL_danube_y65[[1]]))))~sort(maxOL_danube_y65[[1]])))
+plot(lm(qualn3(prob, pelln3(samlmu(sort(maxOL_danube_y65[[1]])),bound=0))~sort(maxOL_danube_y65[[1]])))
+plot(lm(quagev(prob, pelgev(samlmu(sort(maxOL_danube_y65[[1]]))))~sort(maxOL_danube_y65[[1]])))
+par(mfrow=c(2,2))
+dev.off()
+plot(ge$residuals)
+plot(gu)
+plot(pe$residuals)
+plot(le$residuals)
+median(ge$residuals)
+median(pe$residuals)
+plot(quagev(prob, pelgev(samlmu(maxOL_danube_y65[[1]]))),sort(maxOL_danube_y65[[1]]))
+abline(1000,1400)
+sort(maxOL_danube_y65[[1]])
+
+ad.test(maxOL_danube_y65[[4]])
+
+# function that takes the function with the min residuals and calculates. either shift (30yrs) or cummulative
+# for 5 functions. Input is a maxOL vector (via e.g. lapply(maxOL[[x]]))
+
+des_fun<-function(maxOL,shift="TRUE",quantile=0.99,...){
+shift<-matrix(NA,(NROW(maxOL)/2),5)
+cummat<-matrix(NA,(NROW(maxOL)/2),5)
+minres<-matrix(NA,5,1)
+colnames(shift)<-c("Wei_shift","Gum_shift","PE3_shift","LN3_shift","GEV_shift")
+colnames(cummat)<-c("Wei_acc","Gum_acc","PE3_acc","LN3_acc","GEV_acc")
+for(i in seq_along(shift[,1])){
+  if(shift=="TRUE"){
+  seqq<-seq(i,29+i,1)
+  }else{
+    seqq<-seq(1,29+i,1)
+  }
+n<-length(maxOL[seqq])
+prob<-(1:n)/(n+1)
+minres[1,1]<-sqrt(median(summary(lm(quawei(prob, pelwei(samlmu(sort(maxOL[seqq])),bound = 0))~sort(maxOL[seqq])))$residuals)^2)
+minres[2,1]<-sqrt(median(summary(lm(quagum(prob, pelgum(samlmu(sort(maxOL[seqq]))))~sort(maxOL[seqq])))$residuals)^2)
+minres[3,1]<-sqrt(median(summary(lm(quape3(prob, pelpe3(samlmu(sort(maxOL[seqq]))))~sort(maxOL[seqq])))$residuals)^2)
+minres[4,1]<-sqrt(median(summary(lm(qualn3(prob, pelln3(samlmu(sort(maxOL[seqq])),bound=0))~sort(maxOL[seqq])))$residuals)^2)
+minres[5,1]<-sqrt(median(summary(lm(quagev(prob, pelgev(samlmu(sort(maxOL[seqq]))))~sort(maxOL[seqq])))$residuals)^2)
+
+if(min(minres[,1])==minres[1,1]){
+    y0.wei<-quawei(f=quantile, para=pelwei(samlmu(maxOL[seqq]),bound=0))
+    shift[i,1]<-y0.wei
+    cummat[i,1]<-y0.wei
+}else{
+  if(min(minres[,1])==minres[2,1]){
+      y0.gum<-quagum(f=quantile, para=pelgum(samlmu(maxOL[seqq])))
+      shift[i,2]<-y0.gum
+      cummat[i,2]<-y0.gum
+  }else{
+    if(min(minres[,1])==minres[3,1]){
+        y0.pe3<-quape3(f=quantile, para=pelpe3(samlmu(maxOL[seqq])))
+        shift[i,3]<-y0.pe3
+        cummat[i,3]<-y0.pe3
+    }else{
+      if(min(minres[,1])==minres[4,1]){
+          y0.ln3<-qualn3(f=quantile, para=pelln3(samlmu(maxOL[seqq]),bound=0))
+          shift[i,4]<-y0.ln3
+          cummat[i,4]<-y0.ln3
+      }else{
+        if(min(minres[,1])==minres[5,1]){
+            y0.gev<-quagev(f=quantile, para=pelgev(samlmu(maxOL[seqq])))
+            shift[i,5]<-y0.gev
+            cummat[i,5]<-y0.gev
+        }
+      }
+    }
+  }
+}
+}
+shift<-shift[,complete.cases(shift)]
+cummat<-cummat[,complete.cases(cummat)]
+comb<-cbind(shift,cummat)
+return(comb)
+}
